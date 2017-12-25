@@ -3,12 +3,12 @@ package com.github.saem.superservicetime.daemon
 import com.github.saem.superservicetime.commandline.Command
 import java.io.Writer
 
-class Daemon () {
-    abstract fun doTheWork() {}
-    abstract fun uponFinish() {}
+interface Daemon {
+    fun doTheWork()
+    fun uponFinish()
 }
 
-abstract class DaemonCommand (val daemon: Daemon) : Command () {
+abstract class DaemonCommand (val daemon: Daemon) : Command ("daemon") {
     final override fun run(standardWriter: Writer, errorWriter: Writer): Int {
         try {
             daemon.doTheWork()
@@ -20,9 +20,9 @@ abstract class DaemonCommand (val daemon: Daemon) : Command () {
                 return exit.returnCode
             }
         }
+
+        return 0
     }
 }
 
-class DaemonExitException(val returnCode: Int): RuntimeException() {
-
-}
+class DaemonExitException(val returnCode: Int): RuntimeException()

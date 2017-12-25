@@ -4,65 +4,78 @@ import com.xenomachina.argparser.ArgParser
 import com.xenomachina.argparser.DefaultHelpFormatter
 import com.xenomachina.argparser.ShowHelpException
 import com.xenomachina.argparser.SystemExitException
+import sun.misc.Signal
 import java.io.OutputStreamWriter
 import java.io.Writer
+import kotlin.system.exitProcess
 
 class Console (
-        args: Array<String>,
         private val appName: String,
+        private val commands: Map<String, Command>,
         private val standardWriter: Writer,
         private val errorWriter: Writer,
-        private val commands: Map<String, Command>
-    ) {
+        private val exitProcess: (Int) -> Nothing,
+        private val sigIntHandler: (Signal) -> Int?
+) {
 
     companion object {
-        const val INVALID_COMMAND = 1
+        const val INVALID_COMMAND = -1
+        const val EARLY_EXIT = 1
 
-        fun create(args: Array<String>,
-                   appName: String,
-                   commands: Map<String, Command>): Console =
+        fun create(appName: String,
+                   commands: Map<String, Command>,
+                   sigIntHandler: (Signal) -> Int? = { null }): Console =
                 Console(
-                        args,
                         appName,
+                        commands,
                         OutputStreamWriter(System.out),
                         OutputStreamWriter(System.err),
-                        commands)
+                        ::exitProcess,
+                        sigIntHandler)
     }
 
-    private val parser = ArgParser(
-            args,
-            ArgParser.Mode.POSIX,
-            DefaultHelpFormatter("Command line interface."))
+    fun run(args: Array<String>) {
+        val parser = ArgParser(
+                args,
+                ArgParser.Mode.POSIX,
+                DefaultHelpFormatter("Command line interface."))
 
-    private val command by parser.positional(
-            "COMMAND",
-            "The command to run (eg. daemon)") {
-        toCommand(this)
+        val command by parser.positional(
+                "COMMAND",
+                "The command to run (eg. daemon)") {
+            toCommand(this)
+        }
+
+        setupSignalHandling()
+
+        try {
+            parser.run {
+                exitProcess(command.run(standardWriter, errorWriter))
+            }
+        } catch (h: ShowHelpException) {
+            printAndExit(h)
+        } catch (e: SystemExitException) {
+            printAndExit(e)
+        }
     }
 
     // @todo improve the experience by outputting more helpful error messages
-    // @todo improve the experience by outputting did you mean?
+    // @todo improve the experience by outputting 'did you mean?'
     private fun toCommand(commandString: String) =
             commands[commandString.toLowerCase()] ?:
                     throw InvalidCommandException(commandString)
 
-    fun run(): Int {
-        try {
-            parser.run {
-                return command.run(standardWriter, errorWriter)
-            }
-        } catch (h: ShowHelpException) {
-            return printAndGetExitCode(h)
-        } catch (e: SystemExitException) {
-            return printAndGetExitCode(e)
-        }
+    private fun setupSignalHandling() {
+        Signal.handle(Signal("INT"), {
+            exitProcess(sigIntHandler(it) ?: EARLY_EXIT)
+        })
     }
 
-    private fun printAndGetExitCode(e: SystemExitException): Int {
+    private fun printAndExit(e: SystemExitException): Nothing {
         val writer = if (e.returnCode == 0) standardWriter else errorWriter
         e.printUserMessage(writer, appName, 0)
         writer.flush()
-        return e.returnCode
+        exitProcess(e.returnCode)
     }
 }
 
