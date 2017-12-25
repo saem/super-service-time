@@ -79,6 +79,14 @@ class Console (
     }
 }
 
+abstract class Command(val name: String) {
+    override fun toString(): String = name
+
+    abstract fun run(standardWriter: Writer, errorWriter: Writer): Int
+
+    open fun gracefulExit(): Int = Console.EARLY_EXIT
+}
+
 private class InvalidCommandException(invalidCommandString: String):
         SystemExitException(
                 when(invalidCommandString) {
@@ -86,9 +94,3 @@ private class InvalidCommandException(invalidCommandString: String):
                     else -> "Invalid command $invalidCommandString, try using --help"
                 },
                 Console.INVALID_COMMAND)
-
-abstract class Command(val name: String) {
-    override fun toString(): String = name
-
-    abstract fun run(standardWriter: Writer, errorWriter: Writer): Int
-}

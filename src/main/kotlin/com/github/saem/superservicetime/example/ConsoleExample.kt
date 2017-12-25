@@ -7,13 +7,13 @@ import java.io.Writer
 fun main(args: Array<String>) {
     Console.create(
             "example",
-            listOf(DaemonCommand()).associateBy { c -> c.name })
+            listOf(HelloCommand()).associateBy { c -> c.name })
             .run(args)
 }
 
-private class DaemonCommand : Command("daemon") {
+private class HelloCommand : Command("hello") {
     override fun run(standardWriter: Writer, errorWriter: Writer): Int {
-        standardWriter.write("Let's pretend a daemon is running!")
+        standardWriter.write("Oh Hai!")
         return 0
     }
 }
