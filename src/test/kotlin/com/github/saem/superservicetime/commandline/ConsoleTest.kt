@@ -1,158 +1,127 @@
 package com.github.saem.superservicetime.commandline
 
+import com.github.ajalt.clikt.output.CliktConsole
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.Assertions.*
-import java.io.Writer
 import java.util.*
 
 class ConsoleTest {
     @Test
     fun noArgs() {
-//        val writerHistory = ArrayList<WriterMessage>()
-//        val outWriter = OutWriter(writerHistory)
-//
-//        val consoleApp =
-//
-//        val exitCode = consoleApp.run()
-//
-//        assertEquals(Console.INVALID_COMMAND, exitCode)
-//        assertEquals(
-//                "test: No command provided, try using --help\n",
-//                writtenHistoryToString(writerHistory))
+        val writerHistory = ArrayList<ConsoleHistory>()
+        val console = TestConsole(writerHistory)
+
+        val consoleApp = Console("app", console)
+
+        val exitCode = consoleApp.run(listOf())
+
+        assertEquals(Console.GENERAL_ERROR, exitCode)
+        assertTrue(historyHasErrors(writerHistory))
+        assertEquals("""
+                    |Usage: app [OPTIONS]
+                    |
+                    |Options:
+                    |  -h, --help  Show this message and exit
+                    |
+                    |Error: Must call a sub-command.
+                    |
+                """.trimMargin(),
+                historyToString(writerHistory))
     }
 
     @Test
     fun invalidCommand() {
-        val writerHistory = ArrayList<WriterMessage>()
-        val outWriter = OutWriter(writerHistory)
+        val writerHistory = ArrayList<ConsoleHistory>()
+        val console = TestConsole(writerHistory)
 
-//        val consoleApp = Console(
-//                arrayOf("NOTACOMMAND"),
-//                "test",
-//                outWriter,
-//                outWriter,
-//                listOf(TestCommand()).associateBy { c -> c.name })
-//
-//        val exitCode = consoleApp.run()
-//
-//        assertEquals(Console.INVALID_COMMAND, exitCode)
-//        assertEquals(
-//                "test: Invalid command NOTACOMMAND, try using --help\n",
-//                writtenHistoryToString(writerHistory)
-//        )
+        val consoleApp = Console("app", console)
+
+        val exitCode = consoleApp.run(listOf("NOTACOMMAND"))
+
+        assertEquals(Console.GENERAL_ERROR, exitCode)
+        assertTrue(historyHasErrors(writerHistory))
+        assertEquals("""
+                    |Usage: app [OPTIONS]
+                    |
+                    |Error: Got unexpected extra argument (NOTACOMMAND)
+                    |
+                    """.trimMargin(),
+                historyToString(writerHistory)
+        )
     }
 
     @Test
     fun askForHelp() {
-        val writerHistory = ArrayList<WriterMessage>()
-        val outWriter = OutWriter(writerHistory)
+        val writerHistory = ArrayList<ConsoleHistory>()
+        val console = TestConsole(writerHistory)
 
-//        val consoleApp = Console(
-//                arrayOf("--help"),
-//                "test",
-//                outWriter,
-//                outWriter,
-//                listOf(TestCommand()).associateBy { c -> c.name })
-//
-//        val exitCode = consoleApp.run()
-//
-//        assertEquals(0, exitCode)
-//
-//        val historyString = writtenHistoryToString(writerHistory)
-//
-//        assertTrue(
-//                historyString.startsWith("usage: test"),
-//                "Help message didn't start with 'usage: test', instead was: $historyString")
+        val consoleApp = Console("app", console)
+
+        val exitCode = consoleApp.run(listOf("--help"))
+
+        assertEquals(Console.SUCCESS, exitCode)
+        assertTrue(historyHasNoErrors(writerHistory))
+        assertEquals("""
+                    |Usage: app [OPTIONS]
+                    |
+                    |Options:
+                    |  -h, --help  Show this message and exit
+                    |
+                    """.trimMargin(),
+                historyToString(writerHistory))
     }
 
     @Test
     fun askForHelpUsingTheShortForm() {
-        val writerHistory = ArrayList<WriterMessage>()
-        val outWriter = OutWriter(writerHistory)
+        val writerHistory = ArrayList<ConsoleHistory>()
+        val console = TestConsole(writerHistory)
 
-//        val consoleApp = Console(
-//                arrayOf("-h"),
-//                "test",
-//                outWriter,
-//                outWriter,
-//                listOf(TestCommand()).associateBy { c -> c.name })
-//
-//        val exitCode = consoleApp.run()
-//
-//        assertEquals(0, exitCode)
-//
-//        val historyString = writtenHistoryToString(writerHistory)
-//
-//        assertTrue(
-//                historyString.startsWith("usage: test"),
-//                "Help message didn't start with 'usage: test', instead was: $historyString")
+        val consoleApp = Console("app", console)
+
+        val exitCode = consoleApp.run(listOf("-h"))
+
+        assertEquals(Console.SUCCESS, exitCode)
+        assertTrue(historyHasNoErrors(writerHistory))
+        assertEquals("""
+                    |Usage: app [OPTIONS]
+                    |
+                    |Options:
+                    |  -h, --help  Show this message and exit
+                    |
+                    """.trimMargin(),
+                historyToString(writerHistory))
     }
 }
 
-class OutWriter(val writerHistory: MutableList<WriterMessage>) : Writer() {
-    override fun flush() {
-        writerHistory.add(Flush())
-    }
+fun historyHasErrors(history: List<ConsoleHistory>): Boolean =
+        history.any { it is PrintError }
 
-    override fun close() {
-        writerHistory.add(Close())
-    }
+fun historyHasNoErrors(history: List<ConsoleHistory>): Boolean =
+        !historyHasErrors(history)
 
-    override fun write(p0: CharArray?, p1: Int, p2: Int) {
-        writerHistory.add(Write(p0, p1, p2))
-    }
-}
-
-fun historyIsValid(history: List<WriterMessage>): Boolean {
-    if (!history.contains(Close())) {
-        return true
-    }
-
-    // No writes or flushes after a close is called
-    return !history.subList(history.indexOf(Close()), history.size).any {
-        when (it) {
-            is Write -> true
-            is Flush -> true
-            else -> false
-        }
-    }
-}
-
-fun writtenHistoryToString(history: List<WriterMessage>): String {
-    assertTrue(
-            historyIsValid(history),
-            "Invalid history, cannot convert history to String")
-
+fun historyToString(history: List<ConsoleHistory>): String {
     return history.fold("") { s, m ->
         s + when (m) {
-            is Write -> m.chars?.joinToString(separator = "", limit = m.finish, truncated = "") ?: ""
-            else -> ""
+            is PrintMessage -> m.text
+            is PrintError -> m.text
         }
     }
 }
 
-sealed class WriterMessage
-data class Write(val chars: CharArray?, val start: Int, val finish: Int) : WriterMessage() {
-    override fun equals(other: Any?): Boolean {
-        if (this === other) return true
-        if (javaClass != other?.javaClass) return false
+sealed class ConsoleHistory
+data class PrintMessage(val text: String) : ConsoleHistory()
+data class PrintError(val text: String) : ConsoleHistory()
 
-        other as Write
-
-        if (!Arrays.equals(chars, other.chars)) return false
-        if (start != other.start) return false
-        if (finish != other.finish) return false
-
-        return true
+class TestConsole(
+        private val writerHistory: MutableList<ConsoleHistory>)
+    : CliktConsole {
+    override fun print(text: String, error: Boolean) {
+        writerHistory.add(if (error) PrintError(text) else PrintMessage(text))
     }
 
-    override fun hashCode(): Int {
-        var result = chars?.let { Arrays.hashCode(it) } ?: 0
-        result = 31 * result + start
-        result = 31 * result + finish
-        return result
+    override fun promptForLine(prompt: String, hideInput: Boolean): String? {
+        TODO("not implemented")
     }
+
+    override val lineSeparator: String get() = System.lineSeparator()
 }
-
-data class Flush(val dummy: Int = 0) : WriterMessage()
-data class Close(val dummy: Int = 1) : WriterMessage()

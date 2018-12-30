@@ -1,20 +1,21 @@
 package com.github.saem.superservicetime.commandline
 
 import com.github.ajalt.clikt.core.*
+import com.github.ajalt.clikt.output.CliktConsole
 import java.lang.RuntimeException
 import kotlin.system.exitProcess
 
 open class Console(
         appName: String,
+        console: CliktConsole? = null,
         vararg subCommands: SubCommand
 ) {
-
     companion object {
         const val SUCCESS = 0
         const val GENERAL_ERROR = 1 // used by Clikt as well
     }
 
-    protected val command = BaseCommand(appName)
+    protected val command = BaseCommand(appName, console)
             .subcommands(*subCommands)
 
     fun run(argv: List<String>): Int =
@@ -35,10 +36,13 @@ open class Console(
             e: Exception,
             errorCode: Int = GENERAL_ERROR
     ): Int {
-        fun success(msg: String? = null) = msg?.let{command.writeOutput(msg)}.let { SUCCESS }
-        fun error(msg: String?, code: Int = errorCode) = command.writeError(msg).let { code }
+        fun success(msg: String? = null) =
+                msg?.let { command.writeOutput(msg) }.let { SUCCESS }
+        fun error(msg: String?, code: Int = errorCode) =
+                command.writeError(msg).let { code }
 
         return when (e) {
+            is ErrorPrintHelpMessage -> error(e.message)
             is PrintHelpMessage -> success(e.command.getFormattedHelp())
             is PrintMessage -> success(e.message)
             is UsageError -> error(e.helpMessage(command.context))
@@ -49,6 +53,8 @@ open class Console(
         }
     }
 }
+
+typealias ContextConfig = Context.Builder.() -> Unit
 
 abstract class SubCommand(
         name: String,
@@ -73,7 +79,31 @@ open class ExitCommand(
         get() = code != 0
 }
 
-class BaseCommand(appName: String) : NoRunCliktCommand(name = appName) {
+class ErrorPrintHelpMessage(
+        private val command: CliktCommand,
+        private val text: String
+        ) : CliktError() {
+    override val message: String
+        get() = "${command.getFormattedHelp()}\n\nError: $text"
+}
+
+class BaseCommand(appName: String,
+                  console: CliktConsole? = null) : CliktCommand(
+        name = appName,
+        invokeWithoutSubcommand = true
+) {
+    init {
+        if (console != null) {
+            context {
+                this.console = console
+            }
+        }
+    }
+    override fun run() {
+        if(context.invokedSubcommand == null)
+            throw ErrorPrintHelpMessage(this, "Must call a sub-command.")
+    }
+
     fun writeOutput(message: Any?, trailingNewline: Boolean = true) {
         echo(message, trailingNewline)
     }
