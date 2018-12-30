@@ -1,15 +1,16 @@
 package com.github.saem.superservicetime.daemon
 
-import com.github.saem.superservicetime.commandline.Command
-import java.io.Writer
+import com.github.saem.superservicetime.commandline.Console
+import com.github.saem.superservicetime.commandline.ExitCommand
+import com.github.saem.superservicetime.commandline.SubCommand
 
-class Daemon () {
-    abstract fun doTheWork() {}
-    abstract fun uponFinish() {}
+interface Daemon {
+    fun doTheWork()
+    fun uponFinish()
 }
 
-abstract class DaemonCommand (val daemon: Daemon) : Command () {
-    final override fun run(standardWriter: Writer, errorWriter: Writer): Int {
+abstract class DaemonCommand(private val daemon: Daemon) : SubCommand("daemon") {
+    override fun run() {
         try {
             daemon.doTheWork()
         } catch (exit: DaemonExitException) {
@@ -17,12 +18,10 @@ abstract class DaemonCommand (val daemon: Daemon) : Command () {
                 daemon.uponFinish()
             } catch (e: Exception) {
                 // @todo do some logging here
-                return exit.returnCode
+                throw DaemonExitException(Console.GENERAL_ERROR)
             }
         }
     }
 }
 
-class DaemonExitException(val returnCode: Int): RuntimeException() {
-
-}
+class DaemonExitException(exitCode: Int) : ExitCommand(exitCode)
